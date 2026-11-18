@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ingredientes | Cocinando código</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --ink:#2b2420; --muted:#7a6f66; --paper:#fffdf9; --line:#ece4da;
+    --accent:#e2572b; --accent-ink:#fff; --soft:#fbefe6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif}
+  h1,h2,h3{font-family:"Fraunces",Georgia,serif;margin:0}
+  .hidden{display:none!important}
+
+  /* ---------- FORMULARIO (celular) ---------- */
+  #formView{min-height:100%;display:flex;justify-content:center;padding:28px 18px 48px}
+  .card{width:100%;max-width:460px}
+  .kicker{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .card h1{font-size:32px;line-height:1.1;margin:6px 0 8px}
+  .card p.lead{color:var(--muted);margin:0 0 26px;line-height:1.45}
+  label{display:block;font-weight:700;margin:0 0 6px;font-size:15px}
+  label small{display:block;font-weight:400;color:var(--muted);font-size:13px;margin-top:2px}
+  .field{margin-bottom:20px}
+  input[type=text]{width:100%;font:inherit;font-size:16px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);outline:none;transition:border-color .15s}
+  input[type=text]:focus{border-color:var(--accent)}
+  .picker{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .picker button{font-size:26px;line-height:1;aspect-ratio:1;border:1.5px solid var(--line);background:#fff;border-radius:12px;cursor:pointer;padding:0;transition:transform .1s,border-color .15s,background .15s}
+  .picker button[aria-pressed=true]{border-color:var(--accent);background:var(--soft);transform:scale(1.06)}
+  .submit{width:100%;font:inherit;font-weight:700;font-size:17px;padding:15px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);cursor:pointer;margin-top:6px}
+  .submit:disabled{opacity:.55;cursor:default}
+  .err{color:#b3261e;font-size:14px;margin-top:10px;min-height:1em}
+  .done{text-align:center;padding-top:40px}
+  .done .big{font-size:96px;line-height:1;margin-bottom:12px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+  .done h2{font-size:28px;margin-bottom:8px}
+  .done p{color:var(--muted)}
+  .linkbtn{background:none;border:0;color:var(--accent);font:inherit;font-weight:700;cursor:pointer;margin-top:18px;text-decoration:underline}
+  @keyframes pop{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
+
+  /* ---------- LIENZO (proyector) ---------- */
+  #canvasView{position:fixed;inset:0;overflow:hidden;background:#fff}
+  .canvasHead{position:absolute;top:22px;left:28px;z-index:5;pointer-events:none}
+  .canvasHead h1{font-size:clamp(24px,3vw,40px)}
+  .canvasHead .count{color:var(--muted);margin-top:4px;font-size:15px}
+  .canvasHead .hint{color:var(--muted);margin-top:2px;font-size:13px}
+  .qrBox{position:absolute;right:22px;bottom:22px;z-index:900;background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:12px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+  .qrBox p{margin:8px 0 0;font-size:13px;font-weight:700}
+  .qrBox button{margin-top:6px;font:inherit;font-size:12px;border:0;background:none;color:var(--muted);cursor:pointer;text-decoration:underline}
+  .qrToggle{position:absolute;right:22px;bottom:22px;z-index:900;font:inherit;font-size:13px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;cursor:pointer}
+  #stage{position:absolute;inset:0}
+
+  .item{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;
+        cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;
+        animation:land .7s cubic-bezier(.2,1.5,.4,1) both}
+  .item.dragging{cursor:grabbing}
+  .item .emo{font-size:clamp(46px,5.2vw,78px);line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.12));
+             animation:bob 5s ease-in-out infinite;transition:font-size .35s cubic-bezier(.2,1.4,.4,1)}
+  .item.dragging .emo{animation-play-state:paused;filter:drop-shadow(0 14px 14px rgba(0,0,0,.22))}
+  .item .nm{margin-top:4px;font-weight:700;font-size:clamp(12px,1.1vw,16px);background:#fff;padding:2px 8px;border-radius:999px;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;transition:font-size .3s}
+  .item .info{display:none;margin-top:8px;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:10px 14px;
+              width:max-content;max-width:280px;box-shadow:0 8px 24px rgba(0,0,0,.08);text-align:left}
+  .item .info dt{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700;margin-top:6px}
+  .item .info dt:first-child{margin-top:0}
+  .item .info dd{margin:2px 0 0;font-size:15px;line-height:1.3}
+  .item:not(.grande):hover .emo{font-size:clamp(52px,5.8vw,88px)}
+
+  /* GRANDE */
+  .item.grande .emo{font-size:clamp(120px,13vw,200px)}
+  .item.grande .nm{font-size:clamp(16px,1.6vw,22px);max-width:280px}
+  .item.grande .info{display:block;animation:pop .3s cubic-bezier(.2,1.4,.4,1)}
+
+  @keyframes land{0%{opacity:0;transform:translate(-50%,-140%) scale(.3)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  @keyframes bob{0%,100%{translate:0 0;rotate:-3deg}50%{translate:0 -8px;rotate:3deg}}
+  .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;text-align:center;padding:20px}
+
+  .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;z-index:1000}
+</style>
+</head>
+<body>
+
+<!-- ================= FORMULARIO ================= -->
+<main id="formView" class="hidden">
+  <div class="card">
+    <section id="formWrap">
+      <div class="kicker">Cocinando código</div>
+      <h1>Agrega tu ingrediente</h1>
+      <p class="lead">Contesta y aparecerás en la pantalla del grupo.</p>
+      <form id="f" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="nombre">Tu nombre</label>
+          <input type="text" id="nombre" maxlength="40" required>
+        </div>
+        <div class="field">
+          <label for="background">¿Qué carrera o background tienes?</label>
+          <input type="text" id="background" maxlength="90" required>
+        </div>
+        <div class="field">
+          <label for="cocina">¿Qué tipo de cocina o comida es tu favorita?</label>
+          <input type="text" id="cocina" maxlength="90" required>
+        </div>
+        <div class="field">
+          <label for="ingrediente">¿Y si fueras un ingrediente, qué serías?</label>
+          <input type="text" id="ingrediente" maxlength="60" required>
+        </div>
+        <div class="field">
+          <label>Elige tu fruta o verdura<small>Así aparecerás en el lienzo</small></label>
+          <div class="picker" id="picker"></div>
+        </div>
+        <button class="submit" id="send" type="button">Agregar ingrediente</button>
+        <div class="err" id="err"></div>
+      </form>
+    </section>
+    <section id="doneWrap" class="done hidden">
+      <div class="big" id="doneEmo">🍅</div>
+      <h2>¡Ya estás en el huerto!</h2>
+      <p>Busca tu ingrediente en la pantalla.</p>
+      <button class="linkbtn" id="again">Enviar otra respuesta</button>
+    </section>
+  </div>
+</main>
+
+<!-- ================= LIENZO ================= -->
+<div id="canvasView" class="hidden">
+  <div class="canvasHead">
+    <h1>Cocinando código ingredientes</h1>
+    <div class="count" id="count"></div>
+    <div class="hint">Arrastra los ingredientes · clic para hacerlos grandes o chicos</div>
+  </div>
+  <div id="stage"></div>
+  <div class="qrBox" id="qrBox">
+    <div id="qr"></div>
+    <p>Escanea y agrégate</p>
+    <button id="hideQr">ocultar</button>
+  </div>
+  <button class="qrToggle hidden" id="showQr">Mostrar QR</button>
+</div>
+
+<script>
+/* =========================================================
+   CONFIG: pega aquí tu Project URL y tu anon public key
+   (Supabase → Project Settings → API).
+   Si los dejas vacíos, la página funciona en "modo prueba"
+   guardando solo en este navegador.
+   ========================================================= */
+const CONFIG = {
+  SUPABASE_URL: "https://thvcvigtcxiypumoksja.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_3O_e9mio4ENHEClt-xL80A_lzZGYEms",
+  TABLE: "respuestas"
+};
+
+const PRODUCE = ["🍅","🥕","🌽","🥑","🍆","🌶️","🫑","🥦","🧄","🧅","🥔","🍠","🍋","🍊","🍓","🍇","🍉","🍍","🥭","🍑","🍐","🍎","🍌","🥥"];
+const $ = s => document.querySelector(s);
+const demo = !CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY;
+let sb = null, initError = "";
+if(!demo){
+  try{ sb = window.supabase.createClient(CONFIG.SUPABASE_URL.trim(), CONFIG.SUPABASE_ANON_KEY.trim()); }
+  catch(e){ initError = "No cargó la librería de Supabase ("+(e.message||e)+")"; console.error(e); }
+}
+const DEMO_KEY = "huerto-demo";
+
+function toast(msg){
+  const t=document.createElement("div");t.className="toast";t.textContent=msg;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
+}
+
+/* ---------- datos ---------- */
+function demoRead(){ try{return JSON.parse(localStorage.getItem(DEMO_KEY)||"[]")}catch{return []} }
+function demoWrite(all){ try{localStorage.setItem(DEMO_KEY,JSON.stringify(all))}catch{} }
+
+async function fetchAll(){
+  if(initError) throw new Error(initError);
+  if(demo) return demoRead();
+  const {data,error} = await sb.from(CONFIG.TABLE).select("*").order("created_at",{ascending:true});
+  if(error) throw error;
+  return data||[];
+}
+async function insertRow(row){
+  if(initError) throw new Error(initError);
+  if(demo){
+    const all=demoRead(); const r={...row,id:crypto.randomUUID(),created_at:new Date().toISOString()};
+    all.push(r); demoWrite(all); return r;
+  }
+  const {error} = await sb.from(CONFIG.TABLE).insert(row);
+  if(error) throw error;
+}
+/* guarda cambios de posición (x,y) o tamaño (grande) */
+async function updateRow(id,changes){
+  if(initError) throw new Error(initError);
+  if(demo){
+    const all=demoRead(); const r=all.find(a=>a.id===id); if(r) Object.assign(r,changes); demoWrite(all); return;
+  }
+  const {error} = await sb.from(CONFIG.TABLE).update(changes).eq("id",id);
+  if(error) throw error;
+}
+
+/* ---------- posición: busca el hueco más libre ---------- */
+function pickSpot(existing){
+  let best=null,bestD=-1;
+  for(let i=0;i<40;i++){
+    const x=8+Math.random()*80, y=20+Math.random()*68; // % del lienzo (deja libre título y QR)
+    if(x>78 && y>70) continue; // esquina del QR
+    let d=Infinity;
+    for(const e of existing){ const dx=(e.x-x)*1.6, dy=e.y-y; d=Math.min(d,dx*dx+dy*dy); }
+    if(d>bestD){bestD=d;best={x,y}}
+  }
+  return best||{x:50,y:50};
+}
+
+/* =========================================================
+   VISTA FORMULARIO
+   ========================================================= */
+let chosen = PRODUCE[Math.floor(Math.random()*PRODUCE.length)];
+function initForm(){
+  $("#formView").classList.remove("hidden");
+  const pk=$("#picker");
+  PRODUCE.forEach(e=>{
+    const b=document.createElement("button");b.type="button";b.textContent=e;
+    b.setAttribute("aria-pressed",e===chosen);b.setAttribute("aria-label","Elegir "+e);
+    b.onclick=()=>{chosen=e;pk.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b))};
+    pk.appendChild(b);
+  });
+  $("#f").addEventListener("submit",ev=>{ev.preventDefault();send()});
+  $("#send").addEventListener("click",()=>send());
+  async function send(){
+    if($("#send").disabled) return;
+    const v=id=>$("#"+id).value.trim();
+    const row={nombre:v("nombre"),background:v("background"),cocina:v("cocina"),ingrediente:v("ingrediente"),emoji:chosen,grande:false};
+    if(!row.nombre||!row.background||!row.cocina||!row.ingrediente){$("#err").textContent="Contesta las 3 preguntas y tu nombre 🙂";return}
+    $("#err").textContent="";$("#send").disabled=true;$("#send").textContent="Enviando…";
+    try{
+      let existing=[]; try{existing=await fetchAll()}catch{}
+      Object.assign(row,pickSpot(existing));
+      await insertRow(row);
+      $("#doneEmo").textContent=chosen;
+      $("#formWrap").classList.add("hidden");$("#doneWrap").classList.remove("hidden");
+    }catch(e){
+      console.error(e);$("#err").textContent="No se pudo enviar: "+(e.message||e.error_description||JSON.stringify(e));
+    }finally{$("#send").disabled=false;$("#send").textContent="Enviar al huerto"}
+  }
+  $("#again").onclick=()=>{$("#f").reset();
+    chosen=PRODUCE[Math.floor(Math.random()*PRODUCE.length)];
+    pk.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x.textContent===chosen));$("#doneWrap").classList.add("hidden");$("#formWrap").classList.remove("hidden")};
+  if(demo) toast("Modo prueba: falta configurar Supabase (solo se guarda en este navegador)");
+  if(initError) $("#err").textContent=initError;
+}
+
+/* =========================================================
+   VISTA LIENZO
+   ========================================================= */
+const shown=new Map();     // id -> {el, row}
+let topZ=10;               // el último que tocas queda encima
+let saveErrShown=false;
+
+function updateCount(){ $("#count").textContent=shown.size+(shown.size===1?" ingrediente":" ingredientes"); }
+
+function applyRow(entry,r){
+  entry.row={...entry.row,...r};
+  const el=entry.el;
+  if(!el.classList.contains("dragging")){
+    el.style.left=(entry.row.x??50)+"%";
+    el.style.top=(entry.row.y??50)+"%";
+  }
+  el.classList.toggle("grande",!!entry.row.grande);
+}
+
+function saveChanges(entry,changes){
+  updateRow(entry.row.id,changes).catch(e=>{
+    console.error(e);
+    if(!saveErrShown){ toast("No se pudo guardar el cambio: "+(e.message||JSON.stringify(e))); saveErrShown=true; setTimeout(()=>saveErrShown=false,5000); }
+  });
+}
+
+function addItem(r,animate=true){
+  if(!r) return;
+  if(shown.has(r.id)){ applyRow(shown.get(r.id),r); return; }
+  $(".empty")?.remove();
+
+  const el=document.createElement("div");el.className="item";
+  if(!animate)el.style.animation="none";
+  const emo=document.createElement("div");emo.className="emo";emo.textContent=r.emoji||"🍅";
+  emo.style.animationDelay=(-Math.random()*5)+"s";
+  const nm=document.createElement("div");nm.className="nm";nm.textContent=r.nombre;
+  const info=document.createElement("dl");info.className="info";
+  [["Carrera / background",r.background],["Cocina favorita",r.cocina],["Si fuera un ingrediente",r.ingrediente]].forEach(([k,val])=>{
+    const dt=document.createElement("dt");dt.textContent=k;const dd=document.createElement("dd");dd.textContent=val||"";info.append(dt,dd);
+  });
+  el.append(emo,nm,info);
+  el.style.zIndex=++topZ;
+  $("#stage").appendChild(el);
+
+  const entry={el,row:{...r}};
+  shown.set(r.id,entry);
+  applyRow(entry,r);
+  makeInteractive(entry);
+  updateCount();
+}
+
+/* ---------- arrastrar + clic (mouse y touch) ---------- */
+function makeInteractive(entry){
+  const el=entry.el, stage=$("#stage");
+  let start=null, moved=false;
+
+  el.addEventListener("pointerdown",ev=>{
+    if(ev.button!==undefined && ev.button!==0) return;
+    ev.preventDefault();
+    el.setPointerCapture(ev.pointerId);
+    el.style.animation="none";               // evita que la animación de entrada pelee con el arrastre
+    el.style.zIndex=++topZ;
+    const rect=el.getBoundingClientRect();
+    start={px:ev.clientX, py:ev.clientY,
+           offX:ev.clientX-(rect.left+rect.width/2),
+           offY:ev.clientY-(rect.top+rect.height/2)};
+    moved=false;
+  });
+
+  el.addEventListener("pointermove",ev=>{
+    if(!start) return;
+    if(!moved && Math.hypot(ev.clientX-start.px, ev.clientY-start.py)<6) return; // umbral: menos de 6px = clic
+    moved=true; el.classList.add("dragging");
+    const s=stage.getBoundingClientRect();
+    let x=(ev.clientX-start.offX-s.left)/s.width*100;
+    let y=(ev.clientY-start.offY-s.top)/s.height*100;
+    x=Math.max(2,Math.min(98,x)); y=Math.max(3,Math.min(97,y));
+    entry.row.x=x; entry.row.y=y;
+    el.style.left=x+"%"; el.style.top=y+"%";
+  });
+
+  const end=()=>{
+    if(!start) return;
+    start=null;
+    if(moved){
+      el.classList.remove("dragging");
+      saveChanges(entry,{x:entry.row.x, y:entry.row.y});        // guarda la nueva posición
+    }else{
+      entry.row.grande=!entry.row.grande;                          // clic: grande ↔ chico
+      el.classList.toggle("grande",entry.row.grande);
+      saveChanges(entry,{grande:entry.row.grande});
+    }
+  };
+  el.addEventListener("pointerup",end);
+  el.addEventListener("pointercancel",()=>{ if(start){ start=null; if(moved){ el.classList.remove("dragging"); saveChanges(entry,{x:entry.row.x,y:entry.row.y}); } } });
+}
+
+async function initCanvas(){
+  $("#canvasView").classList.remove("hidden");
+  const formUrl=location.origin+location.pathname;
+  try{ new QRCode($("#qr"),{text:formUrl,width:150,height:150,correctLevel:QRCode.CorrectLevel.M}); }catch{}
+  $("#hideQr").onclick=()=>{$("#qrBox").classList.add("hidden");$("#showQr").classList.remove("hidden")};
+  $("#showQr").onclick=()=>{$("#qrBox").classList.remove("hidden");$("#showQr").classList.add("hidden")};
+
+  let lastErr="";
+  const load=async(animate)=>{ try{ (await fetchAll()).forEach(r=>addItem(r,animate)); lastErr=""; }
+    catch(e){ console.error(e); const m="Error al leer respuestas: "+(e.message||JSON.stringify(e)); if(m!==lastErr){toast(m);lastErr=m} } };
+  await load(false);
+  if(!shown.size){const em=document.createElement("div");em.className="empty";em.textContent="El huerto está vacío… escanea el QR y sé la primera semilla 🌱";$("#stage").appendChild(em)}
+  updateCount();
+
+  if(!demo){
+    sb.channel("huerto")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:CONFIG.TABLE},p=>addItem(p.new,true))
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:CONFIG.TABLE},p=>addItem(p.new,false))
+      .subscribe();
+  }else{
+    window.addEventListener("storage",()=>load(true));
+    toast("Modo prueba: falta configurar Supabase");
+  }
+  setInterval(()=>load(true),6000); // respaldo por si el tiempo real falla
+}
+
+/* ---------- router: index.html = formulario, index.html#lienzo = lienzo ---------- */
+location.hash==="#lienzo" ? initCanvas() : initForm();
+window.addEventListener("hashchange",()=>location.reload());
+</script>
+</body>
+</html>
